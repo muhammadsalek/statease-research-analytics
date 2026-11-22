@@ -1,3 +1,35 @@
+"""StatEase import API.
+
+Run locally (inside the backend directory):
+    uvicorn main:app --host 0.0.0.0 --port 8000
+
+Environment:
+    ALLOW_ORIGINS=https://your-site.vercel.app
+    MAX_UPLOAD_MB=200
+    STATEASE_KEY=                 # optional; never expose a secret in public HTML
+
+Endpoints: GET/HEAD /, GET /health, POST /import, GET /docs.
+"""
+
+import json
+import os
+import shutil
+import tempfile
+from pathlib import Path
+
+import pandas as pd
+import pyreadr
+import pyreadstat
+from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+
+MAX_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
+KEY = os.getenv("STATEASE_KEY") or None
+EXTENSIONS = {".dta", ".sav", ".rds", ".rdata", ".rda"}
+ORIGINS = [s.strip().rstrip("/") for s in os.getenv("ALLOW_ORIGINS", "http://localhost:8000").split(",") if s.strip()]
+
+app = FastAPI(title="StatEase import API", version="0.1.1")
+app.add_middleware(
     CORSMiddleware,
     allow_origins=ORIGINS,
     allow_methods=["GET", "POST", "HEAD", "OPTIONS"],
@@ -126,3 +158,5 @@ async def import_file(
         # Avoid returning filenames, file contents or internal paths to clients.
         raise HTTPException(status_code=422, detail=f"Could not parse file ({type(exc).__name__})")
     finally:
+        await file.close()
+        shutil.rmtree(temp_dir, ignore_errors=True)
